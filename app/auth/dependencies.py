@@ -1,7 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.core.security import TokenValidationError, decode_access_token
+from app.core.security import decode_access_token, AuthError
 from app.users.schemas import CurrentUser
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -10,9 +10,11 @@ bearer_scheme = HTTPBearer(auto_error=False)
 def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> CurrentUser:
-    """Validate the Supabase access token and return the current user.
+    """Validate the JWT access token and return the current user.
 
     Reusable FastAPI dependency for protected endpoints.
+    Validates tokens using local JWT verification (HS256)
+    instead of Supabase JWKS/RS256.
     """
     if credentials is None:
         raise HTTPException(
@@ -25,7 +27,7 @@ def get_current_user(
 
     try:
         payload = decode_access_token(token)
-    except TokenValidationError:
+    except AuthError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired access token",
@@ -36,12 +38,6 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid access token",
-        )
-
-    if payload.get("email_verified") is False:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email not verified. Please verify your email first.",
         )
 
     if not payload.get("sub"):

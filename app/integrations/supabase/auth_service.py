@@ -1,87 +1,79 @@
-import httpx
+"""Supabase database integration - user profile operations.
+
+This module provides database operations for the Supabase profiles table.
+It does NOT use Supabase Auth (auth.users table) - all authentication
+is handled locally via JWT + bcrypt password hashing against the profiles table.
+"""
+from typing import Optional
+
+import bcrypt
+
 from supabase import Client, create_client
 
 from app.core.config import settings
+from app.core.security import hash_password, verify_password
+from app.users.schemas import UserProfileCreate
 
 
-class SupabaseApiError(Exception):
-    """Raised when a Supabase HTTP call fails."""
-
-    def __init__(self, status_code: int, detail: str):
-        self.status_code = status_code
-        self.detail = detail
-        super().__init__(detail)
+def _get_client() -> Client:
+    """Get a Supabase client using the anon key."""
+    return create_client(settings.supabase_url, settings.supabase_anon_key)
 
 
-def _auth_headers(token: str) -> dict[str, str]:
-    return {
-        "apikey": settings.supabase_anon_key,
-        "Authorization": f"Bearer {token}",
+def _profiles() -> Client:
+    """Get the profiles table reference."""
+    return _get_client().table("profiles")
+
+
+def create_user(email: str, password: str, full_name: Optional[str] = None) -> dict:
+    """Create a new user in the profiles table with hashed password.
+    
+    This does NOT create a user in Supabase Auth (auth.users).
+    It only stores user data in the profiles table.
+    """
+    password = hash_password(password)
+
+    user_id = email.replace("@", "_at_").replace(".", "_dot_")
+
+    data = {
+        "id": user_id,
+        "email": email,
+        "full_name": full_name,
+        "password": password,
     }
 
-
-def _raise_for_status(response: httpx.Response) -> None:
-    if response.status_code >= 400:
-        raise SupabaseApiError(response.status_code, response.text or "Supabase request failed")
+    _profiles().insert(data).execute()
+    return {"id": user_id, "email": email, "full_name": full_name}
 
 
-def sign_up(email: str, password: str) -> dict:
-    """Create a new account. Supabase sends the verification email."""
-    client = create_client(settings.supabase_url, settings.supabase_anon_key)
-    return client.auth.sign_up({"email": email, "password": password})
+def verify_credentials(email: str, password: str) -> Optional[dict]:
+    """Verify user credentials against the profiles table.
+    
+    Returns user dict if valid, None otherwise.
+    Does NOT check email confirmation status - only validates email/password.
+    """
+    result = _profiles().select("*").eq("email", email).maybe_single().execute()
+
+    if not result.data:
+        return None
+
+    user = result.data
+
+    if verify_password(password, user["password"]):
+        return {
+            "id": user["id"],
+            "email": user["email"],
+            "full_name": user.get("full_name"),
+        }
+
+    return None
 
 
-def sign_in(email: str, password: str) -> dict:
-    """Log in with email + password (session with access/refresh tokens)."""
-    client = create_client(settings.supabase_url, settings.supabase_anon_key)
-    return client.auth.sign_in_with_password({"email": email, "password": password})
+def get_user(user_id: str) -> Optional[dict]:
+    """Fetch a user from the profiles table by ID."""
+    result = _profiles().select("*").eq("id", user_id).maybe_single().execute()
 
+    if not result.data:
+        return None
 
-def verify_otp(email: str, token: str) -> dict:
-    """Verify the 6-digit email verification OTP sent during signup."""
-    client = create_client(settings.supabase_url, settings.supabase_anon_key)
-    return client.auth.verify_otp({"email": email, "token": token, "type": "signup"})
-
-
-def resend_otp(email: str) -> dict:
-    """Resend the signup verification OTP."""
-    client = create_client(settings.supabase_url, settings.supabase_anon_key)
-    return client.auth.resend({"type": "signup", "email": email})
-
-
-def reset_password_for_email(email: str) -> dict:
-    """Send the password-recovery email."""
-    client = create_client(settings.supabase_url, settings.supabase_anon_key)
-    return client.auth.reset_password_for_email(email)
-
-
-def update_password(access_token: str, new_password: str) -> dict:
-    """Update the password for the authenticated (recovery) session."""
-    response = httpx.put(
-        f"{settings.supabase_url}/auth/v1/user",
-        json={"password": new_password},
-        headers=_auth_headers(access_token),
-        timeout=10,
-    )
-    _raise_for_status(response)
-    return response.json() if response.content else {}
-
-
-def sign_out(access_token: str) -> dict:
-    """Invalidate the current session/token."""
-    response = httpx.post(
-        f"{settings.supabase_url}/auth/v1/logout",
-        headers=_auth_headers(access_token),
-        timeout=10,
-    )
-    _raise_for_status(response)
-    return {"status": "ok"}
-
-
-def get_supabase_admin() -> Client:
-    key = settings.supabase_service_role_key or settings.supabase_anon_key
-    return create_client(settings.supabase_url, key)
-
-
-def get_supabase_user(token: str) -> Client:
-    return create_client(settings.supabase_url, token)
+    return result.data

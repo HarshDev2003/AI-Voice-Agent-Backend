@@ -13,7 +13,12 @@ UNVERIFIED_TOKEN = "unverified-token"
 VALID_CLAIMS = {
     "sub": TEST_USER_ID,
     "email": TEST_EMAIL,
-    "email_verified": True,
+    "role": "authenticated",
+}
+
+UNVERIFIED_CLAIMS = {
+    "sub": TEST_USER_ID,
+    "email": TEST_EMAIL,
     "role": "authenticated",
 }
 
@@ -35,7 +40,7 @@ def client(monkeypatch):
         if token == VALID_TOKEN:
             return dict(VALID_CLAIMS)
         if token == UNVERIFIED_TOKEN:
-            return {**VALID_CLAIMS, "email_verified": False}
+            return dict(UNVERIFIED_CLAIMS)
         raise TokenValidationError("invalid token")
 
     monkeypatch.setattr("app.auth.dependencies.decode_access_token", fake_decode_access_token)

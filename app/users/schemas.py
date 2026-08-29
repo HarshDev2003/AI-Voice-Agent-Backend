@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class CurrentUser(BaseModel):
-    """Resolved from the validated Supabase access token."""
+    """Resolved from the validated JWT access token."""
 
     id: str
     email: Optional[EmailStr] = None
@@ -42,3 +42,14 @@ class UserProfileUpdate(BaseModel):
     timezone: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
+
+
+class SignUpRequest(BaseModel):
+    email: EmailStr
+    password: str
+    full_name: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str

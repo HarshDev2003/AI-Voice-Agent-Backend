@@ -1,1 +1,1 @@
-from app.integrations.supabase import auth_service  # noqa: F401
+from app.integrations.supabase.auth_service import create_client  # noqa: F401

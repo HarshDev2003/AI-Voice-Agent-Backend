@@ -1,6 +1,5 @@
 from tests.conftest import (
     TEST_PROFILE,
-    UNVERIFIED_TOKEN,
     VALID_TOKEN,
     auth_headers,
 )
@@ -17,14 +16,6 @@ def test_invalid_token_rejected(client):
         headers={"Authorization": "Bearer not-a-real-token"},
     )
     assert response.status_code == 401
-
-
-def test_unverified_email_blocked(client):
-    response = client.get(
-        "/api/users/me",
-        headers=auth_headers(UNVERIFIED_TOKEN),
-    )
-    assert response.status_code == 403
 
 
 def test_valid_token_accepted(client, monkeypatch):
