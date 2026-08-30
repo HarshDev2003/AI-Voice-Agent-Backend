@@ -1,29 +1,77 @@
 from functools import lru_cache
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# Keys that must be set when running in production; validated at startup.
+_REQUIRED_PRODUCTION_KEYS = (
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
+    "TWILIO_PHONE_NUMBER",
+    "YOUR_PERSONAL_NUMBER",
+    "DEEPGRAM_API_KEY",
+    "GROQ_API_KEY",
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SERVER_BASE_URL",
+)
+
+
 class Settings(BaseSettings):
-    """Application configuration loaded from the .env file."""
+    """Application configuration, loaded from the environment / `.env`.
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    Covers every variable in docs/Ai-Voice-MVP.md section 8. Secrets default
+    to empty so the app and tests boot without keys in development; production
+    validation fails fast with a clear message when required keys are missing.
+    """
 
-    APP_NAME: str = "Simple Auth API"
-    ENVIRONMENT: str = "development"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
-    # Accept both MONGODB_URL (spec) and MONGODB_URI (existing .env)
-    MONGODB_URL: str | None = None
-    MONGODB_URI: str | None = None
-    MONGODB_DATABASE: str = "auth_db"
+    # --- App ---
+    APP_ENV: str = "development"
+    APP_NAME: str = "AI Voice Agent API"
+    APP_PORT: int = 8000
+    LOG_LEVEL: str = "INFO"
+    SERVER_BASE_URL: str = ""  # public URL for Twilio webhooks (e.g. ngrok)
 
-    JWT_SECRET_KEY: str = "change-this-secret-key"
-    JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-
-    # CORS
+    # --- CORS ---
     FRONTEND_URL: str = "http://localhost:5173"
-    CORS_ORIGINS: str = ""  # comma-separated list; falls back to FRONTEND_URL
+    CORS_ORIGINS: str = ""  # comma-separated; falls back to FRONTEND_URL
+
+    # --- Twilio ---
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_PHONE_NUMBER: str = ""
+    YOUR_PERSONAL_NUMBER: str = ""
+
+    # --- Deepgram ---
+    DEEPGRAM_API_KEY: str = ""
+    DEEPGRAM_STT_MODEL: str = "nova-3"
+    DEEPGRAM_TTS_MODEL: str = "aura-asteria-en"
+
+    # --- Groq ---
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
+
+    # --- Supabase ---
+    SUPABASE_URL: str = ""
+    SUPABASE_SERVICE_ROLE_KEY: str = ""
+
+    @model_validator(mode="after")
+    def _validate_production_secrets(self) -> "Settings":
+        if self.APP_ENV == "production":
+            missing = [key for key in _REQUIRED_PRODUCTION_KEYS if not getattr(self, key)]
+            if missing:
+                raise ValueError(
+                    "Missing required environment variables in production: "
+                    + ", ".join(missing)
+                )
+        return self
 
     @property
     def cors_origins(self) -> list[str]:
@@ -31,13 +79,6 @@ class Settings(BaseSettings):
         if self.FRONTEND_URL and self.FRONTEND_URL not in origins:
             origins.append(self.FRONTEND_URL)
         return origins
-
-    @property
-    def mongodb_url(self) -> str:
-        url = self.MONGODB_URL or self.MONGODB_URI
-        if not url:
-            raise RuntimeError("MONGODB_URL (or MONGODB_URI) is not configured in the environment")
-        return url
 
 
 @lru_cache

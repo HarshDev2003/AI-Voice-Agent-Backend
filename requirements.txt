@@ -2,8 +2,24 @@ fastapi
 uvicorn[standard]
 pydantic
 pydantic-settings
-pymongo
-pyjwt
-pwdlib[bcrypt]
-email-validator
+python-dotenv
 python-multipart
+
+# HTTP + WebSocket client
+httpx
+websockets
+
+# Telephony
+twilio
+
+# AI providers
+deepgram-sdk
+groq
+
+# Persistence
+supabase
+
+# --- dev / test ---
+pytest
+pytest-asyncio
+respx
